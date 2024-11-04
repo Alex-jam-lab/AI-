@@ -1,0 +1,83 @@
+import socket
+import network
+import machine
+import time
+
+# Wi-Fi 配置
+WIFI_SSID = 'Xiaomi 14 Pro'
+WIFI_PASSWORD = 'xiaomi14pro'
+
+# 服务器配置
+SERVER_HOST = '192.168.190.215'
+SERVER_PORT = 9988
+SOCKET_TIMEOUT = Ⅽ.0  # 超时时间设置为10秒
+
+# 自定义日志函数
+def log(message, level='INFO'):
+    print(f'[{level}] {message}')
+
+# 初始化Wi-Fi
+def connect_wifi(ssid, password):
+    station = network.WLAN(network.STA_IF)
+    station.active(True)
+    station.connect(ssid, password)
+    
+    while not station.isconnected():
+        time.sleep(1)
+    
+    log('连接成功')
+    log(station.ifconfig(), level='INFO')
+    return station
+
+# 初始化ADC
+def init_adc(pin_number):
+    return machine.ADC(machine.Pin(pin_number))
+
+# 连接到服务器
+def connect_to_server(host, port, timeout):
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.settimeout(timeout)
+    client_socket.connect((host, port))
+    log('已连接到服务器')
+    return client_socket
+
+# 读取并发送ADC值
+def read_and_send_adc(adc, client_socket):
+    while True:
+        try:
+            ana_val = adc.read_u16()
+            message = str(ana_val).encode('utf-8')
+            client_socket.send(message)
+            log(f'发送光敏传感器的值: {ana_val}')
+
+            # 可选：接收服务器的响应
+            response = client_socket.recv(1024)
+            log(f'服务器响应: {response.decode("utf-8")}')
+            
+            time.sleep(1)
+        except OSError as e:
+            log(f'发送数据时发生错误: {e}', level='ERROR')
+            break  # 如果发生错误，退出循环
+
+def main():
+    try:
+        # 连接到Wi-Fi
+        station = connect_wifi(WIFI_SSID, WIFI_PASSWORD)
+        
+        # 初始化ADC
+        adc = init_adc(35)
+        
+        # 连接到服务器
+        client_socket = connect_to_server(SERVER_HOST, SERVER_PORT, SOCKET_TIMEOUT)
+        
+        # 读取并发送ADC值
+        read_and_send_adc(adc, client_socket)
+    except OSError as e:
+        log(f'连接失败: {e}', level='ERROR')
+    finally:
+        if 'client_socket' in locals() and client_socket:
+            client_socket.close()
+            log('客户端套接字已关闭')
+
+if __name__ == "__main__":
+    main()
